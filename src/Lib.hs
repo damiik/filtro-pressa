@@ -187,17 +187,19 @@ btrItbat = MakeRule f
 -- FOGLIO 10--    
 
 
-part1::Rule [Signal]  
+part1::Rule [Signal]
 part1 = (r2 +++ s3 +++ rPre) <|> (s3 +++ r2)
 
-
+-- veloce pompa gindori
 t1f::Rule [Signal]
 t1f = t3f +++ fNot t2f +++ (t3f <|> rItp) +++ part1
 
 
+-- lenta pompa gindori
 t2f::Rule [Signal]
 t2f = fNot t3f +++ fNot t1f +++ fNot rItp +++ part1
 
+-- <star> pompa gindori
 t3f::Rule [Signal]
 t3f = fNot t2f +++ t3f' +++ part1
 
@@ -276,7 +278,7 @@ worldState = [
         Signal ("RL2", 0), -- sonda fine filtrata (koniec filtrowania/brak wody)
         Signal ("RL3", 0), -- sonda raffreddamento tenute (utrzymanie schładzania)
         Signal ("BtRITES", 0), -- przycisk RITES
-        Signal ("BtRITBAT", 0), -- przycisk RITES
+        Signal ("BtRITBAT", 0), -- przycisk RITBAT
         Signal ("BtRITE-RV", 0) -- przycisk BtRITE-RV
         --Signal ("R2", 0)    -- przekaźnik R2
         --Signal ("T3F", 0)    -- przekaźnik R2
