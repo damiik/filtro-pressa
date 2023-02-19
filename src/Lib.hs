@@ -13,6 +13,7 @@ newtype Rule a = MakeRule {
 }
 
 newtype SignalValue a = SignalValue (Maybe a)
+    deriving Show
 
 
 -- instance Functor Rule where
@@ -331,5 +332,5 @@ worldState = [
 
 someFunc :: IO ()
 someFunc = do 
-            let result = calc rItbat $ (Maybe Int) (worldState, "log:")
+            let result = calc rItbat $ SignalW (worldState, "log:")
             putStrLn $ "Result: " ++ show result
