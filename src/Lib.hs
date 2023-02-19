@@ -1,6 +1,6 @@
 module Lib ( someFunc ) where
 
-
+-- monad version ---
 -- signal: Name, Value
 newtype Signal = Signal (String, Int)
 
