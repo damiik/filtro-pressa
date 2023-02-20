@@ -94,8 +94,12 @@ testSignal ws sig = case ws of
 (>>>)::String -> Rule (SignalValue Int) -> Rule (SignalValue Int)
 s >>> rule = MakeRule f
     where
-    f (SignalW (sw, log)) = case calc rule (SignalW (sw, log ++ s++ " ")) of
-        (result, log) ->  (result, log)
+<<<<<<< Updated upstream
+    f (SignalW (sw, l)) = case calc rule (SignalW (sw,  l ++ s ++ " ")) of
+=======
+    f (SignalW (sw, l)) = case calc rule (SignalW (sw, l ++ s++ " ")) of
+>>>>>>> Stashed changes
+        (result, l') ->  (result, l')
 
 
 
