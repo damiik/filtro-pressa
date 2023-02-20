@@ -1,72 +1,101 @@
+{-# LANGUAGE TupleSections #-}
 module Lib ( someFunc ) where
 
 -- monad version ---
 -- signal: Name, Value
 newtype Signal = Signal (String, Int)
+    deriving Show
 
 -- signal world: signals list, log string
 newtype SignalW = SignalW ([Signal], String)
+    deriving Show
 
 newtype Rule a = MakeRule {
     
-    calc:: SignalW -> (a, String)
+    calc:: SignalW -> (a, SignalW)
 }
+
+-- newtype Rule a = MakeRule {
+    
+--     calc:: SignalW -> (a, SignalW)
+-- }
+
 
 newtype SignalValue a = SignalValue (Maybe a)
     deriving Show
 
 
--- instance Functor Rule where
---   fmap f r = MakeRule (f $ calc r)
+
+instance Functor Rule where  -- fmap needed for Applicative   <$>
+fmap :: (a -> b) -> Rule (SignalValue a) -> Rule (SignalValue b)
+fmap f (MakeRule fp) = MakeRule $ 
+    \st -> case fp st of
+        (SignalValue(Just v), s) -> (SignalValue(Just $ f v), s)
+        (_, s) -> (SignalValue Nothing, s)
+                        
+                              
+
+instance Applicative Rule where
+    -- create parser which return x and input
+    pure x = MakeRule (x,)
+    -- (<*>) :: Rule (a -> b) -> Rule a -> Rule b
+    pf <*> px = MakeRule $ 
+        \(SignalW (ws, s)) -> 
+            case calc pf (SignalW (ws, s)) of
+                (fa, s') -> case calc px s' of
+                    (v, s'') -> (fa v, s'')
+
+                                                    -- calc px (SignalW (ws, s))
+
+
+
+instance Monad Rule where
+
+    -- return x = MakeRule $ \s -> (x, s)
+
+    -- (>>=) :: Rule a -> (a -> Rule b) -> Rule b    
+    (MakeRule fp) >>= f = MakeRule $
+        \st -> case fp st of
+            (v, st') -> calc (f v) st'
 
 
 
 
--- instance Applicative Identity where
---   pure = Identity
---   (Identity f) <*> (Identity a) = Identity (f a)
-
-
-findSignal:: SignalW -> String -> (SignalValue Int, String)
+findSignal:: SignalW -> String -> (SignalValue Int, SignalW)
 findSignal ws sig = case ws of
 
-    SignalW (s1:sx, log') -> if sig == name 
-                              then (SignalValue (Just value), log'++" found: " ++ sig ++ "!")
-                              else findSignal (SignalW (sx, log')) sig
-                              where
-                                 Signal (name, value) = s1
-    SignalW ([s1], log') ->  if sig == name 
-                            then (SignalValue (Just value), log'++" found: " ++ sig ++ "!")
-                            else (SignalValue Nothing,  log'++" cant find: " ++ sig ++ "?")
-                            where
-                                Signal (name, value) = s1
-    SignalW (_, log') -> (SignalValue Nothing, log'++"cant find: " ++ sig ++ "?")
+    SignalW (s1:sx, log') -> 
+        if sig == name 
+        then (SignalValue (Just value), SignalW (s1:sx, log'++" found: " ++ sig ++ "!"))
+        else findSignal (SignalW (sx, log')) sig
+        where
+            Signal (name, value) = s1
+
+    SignalW ([], log') -> (SignalValue Nothing, SignalW ([], log'++"cant find: " ++ sig ++ "?"))
+
+
 
 -- return signal value or Just 0 if no signal present
-testSignal:: SignalW -> String -> (SignalValue Int, String)
+testSignal:: SignalW -> String -> (SignalValue Int, SignalW)
 testSignal ws sig = case ws of
 
-    SignalW (s1:sx, log') ->   if sig == name 
-                                then (SignalValue (Just value), log'++" tested: " ++ sig ++ "!")
-                                else testSignal (SignalW (sx, log')) sig
-                                where
-                                    Signal (name, value) = s1
-    SignalW ([s1], log') ->  if sig == name 
-                            then (SignalValue (Just value), log'++" tested: " ++ sig ++ "!")
-                            else (SignalValue (Just 0), log'++" cant test: " ++ sig ++ "?")
-                            where
-                                Signal (name, value) = s1
-    SignalW (_, log') -> (SignalValue (Just 0), log'++" cant test: " ++ sig ++ "?")
+    SignalW (s1:sx, log') -> 
+        if sig == name 
+        then (SignalValue (Just value), SignalW (s1:sx, log'++" tested: " ++ sig ++ "!"))
+        else testSignal (SignalW (sx, log')) sig
+        where
+            Signal (name, value) = s1
+
+    SignalW ([], log') -> (SignalValue (Just 0),  SignalW ([], log'++" cant test: " ++ sig ++ "?"))
     
 
 
 -- log operator
 (>>>)::String -> Rule (SignalValue Int) -> Rule (SignalValue Int)
 s >>> rule = MakeRule f
-             where
-                f (SignalW (sw, log)) = case calc rule (SignalW (sw, log ++ s++ " ")) of
-                                        (result, log) ->  (result, log)
-
+    where
+    f (SignalW (sw, log)) = case calc rule (SignalW (sw, log ++ s++ " ")) of
+        (result, log) ->  (result, log)
 
 
 
@@ -74,42 +103,33 @@ s >>> rule = MakeRule f
 -- not operator
 fNot::Rule (SignalValue Int)  -> Rule (SignalValue Int) 
 fNot rule = MakeRule f
-            where
-                f sw = case calc rule sw of
-                    (SignalValue (Just v), log) -> if v == 0 
-                                        then (SignalValue $ Just 1, log++" not") 
-                                        else (SignalValue $ Just 0, log++" not")
-                    (SignalValue Nothing, log) -> (SignalValue Nothing, log++" not")
+    where
+        f sw = case calc rule sw of
+            (SignalValue (Just v), SignalW (st, log')) -> 
+                if v == 0 
+                then (SignalValue $ Just 1, SignalW (st, log'++" not")) 
+                else (SignalValue $ Just 0, SignalW (st, log'++" not"))
+            (SignalValue Nothing, SignalW (st, log')) -> (SignalValue Nothing, SignalW(st, log'++" not"))
 
 -- and operator
 (+++)::Rule (SignalValue Int) -> Rule (SignalValue Int) -> Rule (SignalValue Int)
-rule1 +++ rule2 = MakeRule f
-            where
-                f sw = case calc rule1 sw of
-                    (SignalValue (Just v), log) -> if v == 0 
-                                        then (SignalValue (Just 0), log++" +++")
-                                        else                                  
-                                            calc rule2 $ SignalW (signals, log++" +++")
-                                            where 
-                                                SignalW (signals, log') = sw
+-- rule1 +++ rule2 = MakeRule f
 
-                    (SignalValue Nothing, log) -> (SignalValue Nothing, log++" +++")
+(MakeRule p1) +++ (MakeRule p2) = MakeRule $ 
+    \input -> case p1 input of
+        (SignalValue r1, rest) -> case p2 rest of
+            (SignalValue r2, rest2) -> case (r1, r2) of
+                (Just v1, Just v2) -> (SignalValue $ Just (if v1 > 0 && v2 > 0 then 1 else 0), rest2)
+                _ -> (SignalValue Nothing, rest2)
+
 
 
 -- or operator
 (<|>)::Rule (SignalValue Int) -> Rule (SignalValue Int) -> Rule (SignalValue Int)
-rule1 <|> rule2 = MakeRule f
-            where
-                f sw = case calc rule1 sw of
-                    (SignalValue (Just v), log) -> if v /= 0 
-                                        then (SignalValue (Just 1), log++" <|>")
-                                        else 
-                                            calc rule2 $ SignalW (signals, log'++" <|>")
-                                            where 
-                                                SignalW (signals, log') = sw
-
-                    (SignalValue Nothing, log) -> (SignalValue Nothing, log++" <|>")
-
+(MakeRule rule1f) <|> (MakeRule rule2f) = MakeRule $ 
+    \input -> case rule1f input of
+        (SignalValue (Just v1), rest) | v1 > 0 -> (SignalValue (Just v1), rest)
+        _ -> rule2f input
 
 
 -- FOGLIO 14 --
@@ -225,8 +245,8 @@ rItbat =  "rItbat" >>> btrItbat <|> (rFa +++ s2)
 
 btrItbat::Rule (SignalValue Int)
 btrItbat = "btrItbat" >>> MakeRule f
-        where 
-            f s = findSignal s "BtRITBAT"  
+    where 
+        f s = findSignal s "BtRITBAT"  
 
 
 -- FOGLIO 10--    
@@ -251,8 +271,8 @@ t3f = "t3f" >>> fNot t2f +++ t3f' +++ part1
 
 t3f'::Rule (SignalValue Int)
 t3f' = "t3f'" >>> MakeRule f
-            where 
-                f s = testSignal s "T3F"  -- if T3F exists 
+    where 
+        f s = testSignal s "T3F"  -- if T3F exists 
     
 rItp::Rule (SignalValue Int)
 rItp = "rItp" >>> fNot t1f +++ part1
